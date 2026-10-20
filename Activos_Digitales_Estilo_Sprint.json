@@ -1,0 +1,13 @@
+{
+  "name": "simulador-avl101",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simulador didáctico del token AVL101 (Blockchain aplicado)",
+  "scripts": {
+    "start": "serve -s . -l tcp://0.0.0.0:${PORT:-3000}"
+  },
+  "dependencies": {
+    "serve": "14.2.4"
+  },
+  "engines": { "node": ">=18" }
+}

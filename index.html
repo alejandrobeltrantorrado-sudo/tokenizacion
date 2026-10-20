@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Simulación didáctica del token AVL101: 1.000 partes de un apartamento ficticio que cambian de dueño, se pausan y se redimen.">
+<style>html{-webkit-text-size-adjust:100%}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>Simulador AVL101</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500&family=Caveat:wght@600;700&display=swap">
+<style>
+/* Layout: el apartamento (1.000 casillas) a la izquierda como protagonista; guion de clase y bitácora a la derecha. Lenguaje visual del curso: papel blanco, notas adhesivas, tinta roja de marcador. */
+:root{
+  --paper:#FFFFFF; --ink:#1F1F1F; --mute:#66625C; --line:#E4E1DC; --soft:#F6F5F2;
+  --red:#D64532; --ok:#2E7D4F;
+  --c0:#F2C230; --c1:#F08A6E; --c2:#5C9FE0; --burn:#CFCBC4;
+  --note:#FFE88A; --notePink:#FFD9CC; --noteBlue:#DCEBFF;
+  --display:'Archivo',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace; --hand:'Caveat','Comic Sans MS',cursive;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#17171A; --ink:#EDEBE7; --mute:#A39E96; --line:#34333A; --soft:#212126;
+  --red:#F06A55; --ok:#5CC28A;
+  --c0:#E3B523; --c1:#E9795B; --c2:#5795D6; --burn:#4A4850;
+  --note:#4A4320; --notePink:#4B2E27; --noteBlue:#22344D; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#17171A; --ink:#EDEBE7; --mute:#A39E96; --line:#34333A; --soft:#212126;
+  --red:#F06A55; --ok:#5CC28A;
+  --c0:#E3B523; --c1:#E9795B; --c2:#5795D6; --burn:#4A4850;
+  --note:#4A4320; --notePink:#4B2E27; --noteBlue:#22344D; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--display);font-size:15px;line-height:1.45;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{text-wrap:balance;margin:0}
+.mono{font-family:var(--mono)}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--line)}
+header h1{font-size:clamp(24px,3.4vw,36px);font-weight:800;letter-spacing:-.01em}
+header .sub{color:var(--mute);margin-top:4px}
+.sim{font-size:12.5px;color:var(--mute);max-width:420px;border-left:3px solid var(--red);padding-left:10px}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:16px 0}
+.kpi{padding:10px 12px;background:var(--soft);border-radius:6px;min-width:0}
+.kpi .l{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+.kpi .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:700;padding:2px 10px;border-radius:999px}
+.pill.on{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.pill.off{background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red)}
+.main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:24px;align-items:start}
+section h2{font-size:17px;font-weight:700;margin-bottom:8px}
+.gridbox{position:relative}
+#cells{display:grid;grid-template-columns:repeat(40,1fr);gap:2px}
+#cells i{display:block;aspect-ratio:1;border-radius:1.5px;background:var(--c0);transition:background-color .35s ease,transform .35s ease}
+#cells i.o1{background:var(--c1)} #cells i.o2{background:var(--c2)}
+#cells i.b{background:repeating-linear-gradient(45deg,var(--burn) 0 2px,transparent 2px 4px);opacity:.8}
+#cells i.flash{transform:scale(1.35)}
+.stamp{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.stamp span{font-family:var(--hand);font-size:clamp(44px,8vw,88px);color:var(--red);border:4px solid var(--red);padding:0 22px;border-radius:10px;transform:rotate(-8deg);background:color-mix(in srgb,var(--paper) 70%,transparent)}
+.legendnote{font-size:12.5px;color:var(--mute);margin-top:8px}
+.holders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}
+.h{border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.h .top{display:flex;align-items:center;gap:8px;font-weight:700}
+.sw{width:14px;height:14px;border-radius:3px;flex:none}
+.h .addr{font-family:var(--mono);font-size:11px;color:var(--mute);overflow-wrap:anywhere}
+.h .big{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:4px}
+.h .small{font-size:12.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.h .raw{font-family:var(--mono);font-size:11px;color:var(--mute);overflow-wrap:anywhere;margin-top:4px}
+.badge{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;background:var(--ink);color:var(--paper);padding:1px 6px;border-radius:3px;font-weight:600}
+.explain{margin-top:18px;background:var(--note);padding:16px 18px;transform:rotate(-.6deg);box-shadow:0 3px 8px rgba(0,0,0,.12)}
+.explain.bad{background:var(--notePink)}
+.explain h3{font-size:18px;margin-bottom:6px}
+.explain p{margin:0 0 8px;max-width:68ch}
+.explain .remix{font-family:var(--mono);font-size:12px;color:var(--mute);margin:0;overflow-wrap:anywhere}
+.explain .lbl{font-weight:700}
+ol.steps{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+ol.steps li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:6px}
+ol.steps li .n{width:26px;height:26px;border-radius:50%;border:2px solid var(--red);color:var(--red);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+ol.steps li.done{opacity:.55} ol.steps li.done .n{background:var(--red);color:var(--paper)}
+ol.steps li.next{border-color:var(--red);box-shadow:0 0 0 1px var(--red) inset}
+ol.steps li .t{font-weight:600} ol.steps li .d{font-size:12.5px;color:var(--mute)}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer;border:1.5px solid var(--ink);background:var(--paper);border-radius:6px;padding:6px 12px;font-weight:600}
+button.primary{background:var(--ink);color:var(--paper)}
+button:disabled{opacity:.35;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin-top:8px}
+.field{display:grid;gap:3px;min-width:0}
+.field label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+select,input{border:1px solid var(--line);background:var(--soft);border-radius:6px;padding:6px 8px;min-width:0}
+input[type=number]{width:96px}
+.panel{display:grid;gap:22px}
+.free{border-top:1px solid var(--line);padding-top:14px}
+.log{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.log table{width:100%;border-collapse:collapse;font-size:12.5px}
+.log th{position:sticky;top:0;background:var(--soft);text-align:left;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);padding:6px 8px;font-weight:600}
+.log td{padding:6px 8px;border-top:1px solid var(--line);vertical-align:top}
+.log td.bn{font-variant-numeric:tabular-nums;color:var(--mute);white-space:nowrap}
+.log .ev{font-family:var(--mono);font-weight:500}
+.log .fail .ev{color:var(--red)}
+.log .hash{font-family:var(--mono);font-size:10.5px;color:var(--mute)}
+.log tr.new{animation:hl 1.4s ease}
+@keyframes hl{from{background:color-mix(in srgb,var(--c0) 45%,transparent)}to{background:transparent}}
+.themer{display:flex;gap:0;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden;align-self:center}
+.themer button{border:0;border-radius:0;padding:6px 14px;background:var(--paper);color:var(--ink);font-size:13px}
+.themer button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.hand{font-family:var(--hand);font-size:22px;color:var(--red);line-height:1}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.holders{grid-template-columns:minmax(0,1fr)}#cells{gap:1px}}
+@media (prefers-reduced-motion:reduce){#cells i,.log tr.new{transition:none;animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>AVL101 · Apartamento Villa de Leyva 101</h1>
+      <div class="sub">Un apartamento ficticio de COP 400 millones, dividido en 1.000 partes digitales.</div>
+    </div>
+    <div class="themer" role="group" aria-label="Fondo de la página"><button type="button" id="tLight" aria-pressed="false">Fondo claro</button><button type="button" id="tDark" aria-pressed="false">Fondo oscuro</button></div>
+    <p class="sim">Simulación didáctica que reproduce las reglas del contrato del taller (ERC-20 de OpenZeppelin, con pausa, quema y dueño). No es una blockchain ni mueve dinero: todo ocurre en esta página.</p>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi"><div class="l">Partes en circulación</div><div class="v" id="kSupply">1.000</div></div>
+    <div class="kpi"><div class="l">Estado</div><div class="v" id="kState"></div></div>
+    <div class="kpi"><div class="l">Valor por parte</div><div class="v">COP 400.000</div></div>
+    <div class="kpi"><div class="l">Dueño del contrato</div><div class="v" id="kOwner">Emisor</div></div>
+    <div class="kpi"><div class="l">Bloque actual</div><div class="v" id="kBlock">1</div></div>
+  </div>
+
+  <div class="main">
+    <section>
+      <div class="tools"><h2>Quién tiene cada parte del apartamento</h2><span class="hand" id="handNote">cada cuadrito = 1 parte</span></div>
+      <div class="gridbox">
+        <div id="cells" role="img" aria-label="Mapa de las 1.000 partes del apartamento coloreadas por dueño"></div>
+        <div class="stamp" id="stamp" hidden><span>EN PAUSA</span></div>
+      </div>
+      <p class="legendnote">Los colores muestran cuántas partes tiene cada persona. Es una ilustración: en un token ERC-20 todas las unidades son idénticas, así que el contrato guarda saldos, no "la parte número 37". Las rayadas fueron redimidas (quemadas).</p>
+      <div class="holders" id="holders"></div>
+      <div class="explain" id="explain">
+        <h3>Así quedó el token al desplegarlo</h3>
+        <p>El contrato nació en el bloque 1 con dos constancias públicas: nombró al Emisor como dueño (<span class="mono">OwnershipTransferred</span>) y le entregó las 1.000 partes (<span class="mono">Transfer</span> desde la dirección 0x000…, que significa "recién creadas").</p>
+        <p><span class="lbl">Qué ilustra:</span> registrar es publicar. Queda una constancia de quién manda y cuántas partes existen, y nadie la puede borrar.</p>
+        <p class="remix">En Remix lo viste así: status 1 · contract address 0xd9145CCE52D386f254917e481eB44e9943F39138 · Transfer(0x000…, 0x5B38…ddC4, 1000000000000000000000)</p>
+      </div>
+    </section>
+
+    <div class="panel">
+      <section>
+        <div class="tools"><h2>Guion de la clase</h2><button id="reset" type="button">Volver a empezar</button></div>
+        <ol class="steps" id="steps"></ol>
+      </section>
+
+      <section class="free">
+        <h2>Pruebe usted</h2>
+        <div class="row">
+          <div class="field"><label for="fActor">Quién firma</label><select id="fActor"></select></div>
+          <div class="field"><label for="fAct">Acción</label>
+            <select id="fAct"><option value="transfer">Transferir (vender)</option><option value="burn">Quemar (redimir)</option><option value="pause">Pausar</option><option value="unpause">Reanudar</option></select></div>
+          <div class="field" id="wTo"><label for="fTo">A quién</label><select id="fTo"></select></div>
+          <div class="field" id="wAmt"><label for="fAmt">Partes</label><input id="fAmt" type="number" min="1" max="1000" step="1" value="10"></div>
+          <button class="primary" id="fGo" type="button">Firmar y enviar</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Bitácora pública (eventos)</h2>
+        <div class="log"><table><thead><tr><th>Bloque</th><th>Evento</th><th>Detalle</th></tr></thead><tbody id="log"></tbody></table></div>
+        <p class="legendnote">Los identificadores de transacción (hash) son simulados. En una red real cualquiera podría consultar esta bitácora en un explorador como Etherscan.</p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+const ACC=[
+  {name:'Emisor',addr:'0x5B38Da6a701c568545dCfcB03FcB875f56beddC4',note:'Cuenta 1 de Remix'},
+  {name:'Ana',addr:'0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2',note:'Cuenta 2 de Remix'},
+  {name:'Luis',addr:'0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db',note:'Cuenta 3 de Remix'}];
+const OWNER=0, N=1000, COP=400000;
+const short=a=>a.slice(0,6)+'…'+a.slice(-4);
+const raw=n=>n===0?'0':n+'000000000000000000';
+const fmt=n=>n.toLocaleString('es-CO');
+let S;
+
+function init(){
+  S={cells:new Array(N).fill(0),paused:false,block:1,done:0,log:[]};
+  S.log.push({b:1,ev:'OwnershipTransferred',d:'0x000…0000 → '+short(ACC[0].addr)+' (Emisor)'});
+  S.log.push({b:1,ev:'Transfer',d:'0x000…0000 → Emisor · 1.000 partes (emisión)'});
+}
+const bal=i=>S.cells.reduce((s,c)=>s+(c===i),0);
+const supply=()=>S.cells.reduce((s,c)=>s+(c>=0),0);
+let seed=7;
+function hash(){let h='0x';for(let k=0;k<16;k++){seed=(seed*1103515245+12345)%2147483648;h+=(seed%65536).toString(16).padStart(4,'0');}return h;}
+
+// --- reglas del contrato (mismo orden de verificación que OpenZeppelin v5) ---
+function exec(actor,act,to,amt){
+  const who=ACC[actor].name, a=short(ACC[actor].addr);
+  if(act==='pause'||act==='unpause'){
+    if(actor!==OWNER) return fail(`OwnableUnauthorizedAccount(${a})`,`${who} intentó ${act==='pause'?'pausar':'reanudar'}, pero solo el dueño del contrato puede hacerlo.`);
+    if(act==='pause'&&S.paused) return fail('EnforcedPause()','El token ya estaba en pausa.');
+    if(act==='unpause'&&!S.paused) return fail('ExpectedPause()','El token no estaba en pausa.');
+    S.paused=act==='pause'; return ok(act==='pause'?'Paused':'Unpaused', `por ${who} (${a})`);
+  }
+  if(!(amt>=1)) return fail('—','Escriba una cantidad de partes mayor que cero.',true);
+  if(act==='transfer'&&to===actor) return fail('—','Elija un destinatario distinto de quien firma.',true);
+  if(S.paused) return fail('EnforcedPause()',`El token está en pausa: nadie puede ${act==='burn'?'redimir':'vender'} hasta que el Emisor lo reanude.`);
+  const b=bal(actor);
+  if(b<amt) return fail(`ERC20InsufficientBalance(${a}, ${raw(b)}, ${raw(amt)})`,`${who} quiso ${act==='burn'?'redimir':'vender'} ${fmt(amt)} partes, pero solo tiene ${fmt(b)}.`);
+  let moved=[],k=0;
+  for(let i=N-1;i>=0&&k<amt;i--){ if(S.cells[i]===actor){ S.cells[i]=act==='burn'?-1:to; moved.push(i); k++; } }
+  flash(moved);
+  if(act==='burn') return ok('Transfer',`${who} → 0x000…0000 · ${fmt(amt)} partes (redención)`);
+  return ok('Transfer',`${who} → ${ACC[to].name} · ${fmt(amt)} partes (COP ${fmt(amt*COP)})`);
+}
+function ok(ev,d){S.block++;S.log.push({b:S.block,ev,d,h:hash(),fresh:true});return {ok:true,ev,d};}
+function fail(err,why,ui){ if(!ui) S.log.push({b:S.block,ev:'Revertida',d:err,fail:true,fresh:true}); return {ok:false,err,why,ui}; }
+function flash(idx){ const els=document.querySelectorAll('#cells i'); idx.forEach((i,j)=>setTimeout(()=>{els[i].classList.add('flash');setTimeout(()=>els[i].classList.remove('flash'),350)},Math.min(j*3,600))); }
+
+// --- guion ---
+const STEPS=[
+  {t:'Vender el 10 % a Ana',d:'El Emisor transfiere 100 partes.',run:()=>exec(0,'transfer',1,100),
+   say:'Ana compró 100 partes (COP 40 millones). El registro cambió en un solo paso, autorizado solo por la firma digital del Emisor.',
+   ill:'Una compraventa sin escritura, notaría ni oficina de registro. En el mundo físico toma semanas.',
+   remix:'Cuenta 1 · transfer(0xAb84…35cb2, 100000000000000000000)'},
+  {t:'Vender 50 partes a Luis',d:'Ahora hay tres dueños.',run:()=>exec(0,'transfer',2,50),
+   say:'Luis compró 50 partes. El Emisor conserva 850.',
+   ill:'El token reparte la propiedad entre varias personas, como un libro de accionistas que se lleva solo.',
+   remix:'Cuenta 1 · transfer(0x4B20…02db, 50000000000000000000)'},
+  {t:'Ana le revende 20 a Luis',d:'Sin pasar por el Emisor.',run:()=>exec(1,'transfer',2,20),
+   say:'Ana le vendió 20 partes a Luis directamente. El Emisor no tuvo que aprobar nada.',
+   ill:'Un mercado secundario entre personas: el contrato solo verifica que Ana tenga saldo y que el token no esté en pausa.',
+   remix:'Cuenta 2 · transfer(0x4B20…02db, 20000000000000000000)'},
+  {t:'Pausar el token',d:'El Emisor activa el freno.',run:()=>exec(0,'pause'),
+   say:'El Emisor congeló todas las transferencias, por ejemplo ante una orden judicial o un error.',
+   ill:'Un freno de emergencia escrito en el contrato. Lo puede usar el dueño, y nadie más.',
+   remix:'Cuenta 1 · pause() → evento Paused'},
+  {t:'Ana intenta vender en pausa',d:'Debe fallar.',run:()=>exec(1,'transfer',2,10),
+   say:'El contrato rechazó la venta de Ana. Nadie tuvo que intervenir: la regla se aplicó sola.',
+   ill:'Que falle es la prueba de que funciona. El sistema no hace lo que las reglas prohíben.',
+   remix:'Cuenta 2 · transfer(…) → revert EnforcedPause'},
+  {t:'Reanudar',d:'El Emisor libera el token.',run:()=>exec(0,'unpause'),
+   say:'Las transferencias vuelven a estar permitidas.',
+   ill:'La pausa es temporal y queda registrada en la bitácora, con quién la levantó.',
+   remix:'Cuenta 1 · unpause() → evento Unpaused'},
+  {t:'Ana intenta pausar',d:'Debe fallar: no es la dueña.',run:()=>exec(1,'pause'),
+   say:'Ana quiso usar el freno, pero el contrato la rechazó porque no es la dueña.',
+   ill:'Los permisos están en el código. No hay a quién pedirle el favor: la regla vale igual para todos.',
+   remix:'Cuenta 2 · pause() → revert OwnableUnauthorizedAccount'},
+  {t:'Luis intenta vender 500',d:'Más de lo que tiene.',run:()=>exec(2,'transfer',1,500),
+   say:'Luis tiene 70 partes y quiso vender 500. El contrato no lo permite.',
+   ill:'Nadie puede vender lo que no tiene. Es el problema del doble gasto, resuelto por el registro.',
+   remix:'Cuenta 3 · transfer(…, 500000000000000000000) → revert ERC20InsufficientBalance'},
+  {t:'Ana redime 80 partes',d:'Las quema.',run:()=>exec(1,'burn',null,80),
+   say:'Ana devolvió sus 80 partes y se destruyeron. Ahora existen 920.',
+   ill:'Una recompra o liquidación: el total en circulación se ajusta solo y queda constancia de la redención.',
+   remix:'Cuenta 2 · burn(80000000000000000000) → totalSupply = 920000000000000000000'},
+];
+
+// --- render ---
+const $=id=>document.getElementById(id);
+function build(){
+  $('cells').innerHTML='<i></i>'.repeat(N);
+  ['fActor','fTo'].forEach(id=>{$(id).innerHTML=ACC.map((a,i)=>`<option value="${i}">${a.name} (${short(a.addr)})</option>`).join('');});
+  $('fTo').value='1';
+}
+function render(){
+  const els=$('cells').children;
+  for(let i=0;i<N;i++){const c=S.cells[i];els[i].className=c<0?'b':c>0?'o'+c:'';}
+  $('stamp').hidden=!S.paused;
+  $('kSupply').textContent=fmt(supply());
+  $('kState').innerHTML=S.paused?'<span class="pill off">En pausa</span>':'<span class="pill on">Activo</span>';
+  $('kBlock').textContent=fmt(S.block);
+  const sup=supply();
+  $('holders').innerHTML=ACC.map((a,i)=>{const b=bal(i);return `<div class="h">
+    <div class="top"><span class="sw" style="background:var(--c${i})"></span>${a.name}${i===OWNER?' <span class="badge">dueño</span>':''}</div>
+    <div class="addr">${a.addr}</div>
+    <div class="big">${fmt(b)} <span class="small">partes</span></div>
+    <div class="small">${sup?(b/sup*100).toLocaleString('es-CO',{maximumFractionDigits:1}):0} % · COP ${fmt(b*COP)}</div>
+    <div class="raw" title="Así lo muestra balanceOf en Remix">balanceOf: ${raw(b)}</div></div>`;}).join('');
+  $('steps').innerHTML=STEPS.map((s,i)=>`<li class="${i<S.done?'done':i===S.done?'next':''}"><span class="n">${i+1}</span><div><div class="t">${s.t}</div><div class="d">${s.d}</div></div>
+    <button type="button" data-s="${i}" ${i===S.done?'':'disabled'} class="${i===S.done?'primary':''}">${i<S.done?'Hecho':'Ejecutar'}</button></li>`).join('');
+  $('log').innerHTML=S.log.slice().reverse().map(l=>`<tr class="${l.fail?'fail':''} ${l.fresh?'new':''}"><td class="bn">${l.fail?'—':l.b}</td><td><span class="ev">${l.ev}</span>${l.h?`<div class="hash">${l.h.slice(0,18)}…</div>`:''}</td><td class="${l.fail?'mono':''}" style="overflow-wrap:anywhere">${l.d}</td></tr>`).join('');
+  S.log.forEach(l=>l.fresh=false);
+  syncFree();
+}
+function explain(r,step){
+  const e=$('explain');
+  e.className='explain'+(r.ok?'':' bad');
+  if(step){
+    e.innerHTML=`<h3>${r.ok?'Qué acaba de pasar':'El contrato dijo que no'}</h3><p>${step.say}</p><p><span class="lbl">Qué ilustra:</span> ${step.ill}</p><p class="remix">En Remix: ${step.remix}</p>`;
+  } else if(r.ok){
+    e.innerHTML=`<h3>Transacción confirmada</h3><p>Evento <span class="mono">${r.ev}</span>: ${r.d}.</p><p class="remix">Quedó en el bloque ${S.block} de la bitácora.</p>`;
+  } else {
+    e.innerHTML=`<h3>${r.ui?'Falta un dato':'El contrato dijo que no'}</h3><p>${r.why}</p>${r.ui?'':`<p class="remix">Error del contrato: ${r.err}. La transacción se revierte y nada cambia.</p>`}`;
+  }
+}
+function syncFree(){
+  const act=$('fAct').value;
+  $('wTo').hidden=act!=='transfer'; $('wAmt').hidden=act==='pause'||act==='unpause';
+}
+document.addEventListener('click',ev=>{
+  const b=ev.target.closest('button[data-s]');
+  if(b){const i=+b.dataset.s;const r=STEPS[i].run();S.done=i+1;render();explain(r,STEPS[i]);}
+});
+$('fAct').addEventListener('change',syncFree);
+$('fGo').addEventListener('click',()=>{
+  const r=exec(+$('fActor').value,$('fAct').value,+$('fTo').value,Math.floor(+$('fAmt').value));
+  render();explain(r);
+});
+$('reset').addEventListener('click',()=>{seed=7;init();render();
+  $('explain').className='explain';
+  $('explain').innerHTML='<h3>Token recién desplegado</h3><p>El Emisor tiene las 1.000 partes y es el dueño del contrato. Siga el guion de la clase paso a paso.</p>';});
+function setTheme(t,save){
+  document.documentElement.setAttribute('data-theme',t);
+  $('tLight').setAttribute('aria-pressed',t==='light');$('tDark').setAttribute('aria-pressed',t==='dark');
+  if(save){try{localStorage.setItem('avl101-theme',t);}catch(e){}}
+}
+$('tLight').addEventListener('click',()=>setTheme('light',true));
+$('tDark').addEventListener('click',()=>setTheme('dark',true));
+(function(){
+  const h=(location.hash||'').replace('#','');
+  let t=h==='oscuro'?'dark':h==='claro'?'light':null;
+  if(!t){try{t=localStorage.getItem('avl101-theme');}catch(e){}}
+  if(!t) t=window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+  setTheme(t,false);
+})();
+build();init();render();
+})();
+</script>
+
+</body>
+</html>
